@@ -1,0 +1,20 @@
+.{
+    .name = "zig-htmx-tailwind-example",
+    .version = "0.0.0",
+    .minimum_zig_version = "0.13.0",
+    .dependencies = .{
+        .httpz = .{
+            .url = "https://github.com/karlseguin/http.zig/archive/refs/heads/zig-0.13.zip",
+            .hash = "122041d9c6961cd3c3436d7d47568855577365f35a5edf6ced3b9b29cae4a811998e",
+        },
+        .zmpl = .{
+            .url = "https://github.com/jetzig-framework/zmpl/archive/refs/heads/zig-0.13.zip",
+            .hash = "1220d933e8ae4c77f51144f37068b9bde99a22f784fa17a4a4fb82e1bb05b3d5ac03",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
