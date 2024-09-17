@@ -1,6 +1,7 @@
 # zig-htmx-tailwind-example
 [![zig version](https://img.shields.io/badge/0.13.0-orange?style=flat&logo=zig&label=Zig&color=%23eba742)](https://ziglang.org/download/)
 [![reference Zig](https://img.shields.io/badge/deps%20-2-orange?color=%23eba742)](https://github.com/dgv/zig-htmx-tailwind-example/blob/main/build.zig.zon)
+[![htmx version](https://img.shields.io/badge/2.0.2-blue?style=flat&logo=htmx&label=htmx&color=%233366cc)](https://github.com/bigskysoftware/htmx/releases)
 [![build](https://github.com/dgv/zig-htmx-tailwind-example/actions/workflows/build.yml/badge.svg)](https://github.com/dgv/zig-htmx-tailwind-example/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
