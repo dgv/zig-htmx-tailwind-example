@@ -4,8 +4,8 @@ const zmpl = @import("zmpl");
 const css = @embedFile("templates/output.css");
 
 // global general purpose allocator used
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-const allocator = gpa.allocator();
+var global = std.heap.GeneralPurposeAllocator(.{}){};
+const gpa = global.allocator();
 
 // sample data struct for CRUD
 const Company = struct {
@@ -14,7 +14,7 @@ const Company = struct {
     contact: []const u8,
     country: []const u8,
 };
-var data = std.ArrayList(Company).init(allocator);
+var data = std.ArrayList(Company).init(gpa);
 
 pub fn main() !void {
     // load initial data
@@ -23,10 +23,10 @@ pub fn main() !void {
     try data.append(.{ .id = "3", .company = "Microsoft", .contact = "Satya Nadella", .country = "United States" });
     defer data.deinit();
     // parse env
-    const addr = std.process.getEnvVarOwned(allocator, "ADDR") catch "127.0.0.1";
-    const port = try std.fmt.parseUnsigned(u16, std.process.getEnvVarOwned(allocator, "PORT") catch "3000", 10);
+    const addr = std.process.getEnvVarOwned(gpa, "ADDR") catch "127.0.0.1";
+    const port = try std.fmt.parseUnsigned(u16, std.process.getEnvVarOwned(gpa, "PORT") catch "3000", 10);
     // server config
-    var server = try httpz.Server().init(allocator, .{ .address = addr, .port = port, .request = .{
+    var server = try httpz.Server().init(gpa, .{ .address = addr, .port = port, .request = .{
         .max_form_count = 4,
     } });
     // routes
@@ -132,7 +132,6 @@ fn companyGet(req: *httpz.Request, res: *httpz.Response) !void {
     var d = zmpl.Data.init(res.arena);
     defer d.deinit();
     var root = try d.root(.object);
-    //const id = req.param("id").? ;
     res.content_type = .HTML;
     if (req.param("id")) |id| {
         for (data.items) |company| {
@@ -172,9 +171,9 @@ fn companyPut(req: *httpz.Request, res: *httpz.Response) !void {
     if (req.param("id")) |id| {
         for (data.items, 0..) |c, i| {
             if (std.mem.eql(u8, c.id, id)) {
-                data.items[i].company = try allocator.dupe(u8, fd.get("company") orelse "");
-                data.items[i].contact = try allocator.dupe(u8, fd.get("contact") orelse "");
-                data.items[i].country = try allocator.dupe(u8, fd.get("country") orelse "");
+                data.items[i].company = try gpa.dupe(u8, fd.get("company") orelse "");
+                data.items[i].contact = try gpa.dupe(u8, fd.get("contact") orelse "");
+                data.items[i].country = try gpa.dupe(u8, fd.get("country") orelse "");
                 try root.put("id", id);
                 try root.put("company", fd.get("company"));
                 try root.put("contact", fd.get("contact"));
@@ -205,7 +204,7 @@ fn companyPost(req: *httpz.Request, res: *httpz.Response) !void {
         if (n > max) max = n;
     }
     const id = try std.fmt.allocPrint(res.arena, "{d}", .{max + 1});
-    try data.append(.{ .id = try allocator.dupe(u8, id), .company = try allocator.dupe(u8, fd.get("company") orelse ""), .contact = try allocator.dupe(u8, fd.get("contact") orelse ""), .country = try allocator.dupe(u8, fd.get("country") orelse "") });
+    try data.append(.{ .id = try gpa.dupe(u8, id), .company = try gpa.dupe(u8, fd.get("company") orelse ""), .contact = try gpa.dupe(u8, fd.get("contact") orelse ""), .country = try gpa.dupe(u8, fd.get("country") orelse "") });
     var root = try d.root(.object);
     try root.put("companies", data.items);
     if (zmpl.find("row")) |template| {
