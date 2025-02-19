@@ -4,11 +4,11 @@
     .minimum_zig_version = "0.13.0",
     .dependencies = .{
         .httpz = .{
-            .url = "https://github.com/karlseguin/http.zig/archive/refs/heads/zig-0.13.zip",
-            .hash = "12208c1f2c5f730c4c03aabeb0632ade7e21914af03e6510311b449458198d0835d6",
+            .url = "git+https://github.com/karlseguin/http.zig?ref=zig-0.13#2a910af45a6a733adbcf9e5e56642c05f4f5c769",
+            .hash = "12203254adcaba63705ff7ecf1894a5a26d5a5a0a9cfecd01423775fa5566b625138",
         },
         .zmpl = .{
-            .url = "https://github.com/jetzig-framework/zmpl/archive/refs/heads/zig-0.13.zip",
+            .url = "git+https://github.com/jetzig-framework/zmpl?ref=zig-0.13#b596d392283745317f03442fa487baa1d13fd3f7",
             .hash = "1220d933e8ae4c77f51144f37068b9bde99a22f784fa17a4a4fb82e1bb05b3d5ac03",
         },
     },
