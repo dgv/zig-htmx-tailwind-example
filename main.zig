@@ -3,10 +3,6 @@ const httpz = @import("httpz");
 const zmpl = @import("zmpl");
 const css = @embedFile("templates/output.css");
 
-// global general purpose allocator used
-var global = std.heap.GeneralPurposeAllocator(.{}){};
-const gpa = global.allocator();
-
 // sample data struct for CRUD
 const Company = struct {
     id: []const u8,
@@ -14,9 +10,13 @@ const Company = struct {
     contact: []const u8,
     country: []const u8,
 };
-var data = std.ArrayList(Company).init(gpa);
+// data stored globally
+var data = std.ArrayList(Company).init(std.heap.page_allocator); // heap page size usually have 4096
 
 pub fn main() !void {
+    // general purpose allocator
+    var global = std.heap.GeneralPurposeAllocator(.{}){};
+    const gpa = global.allocator();
     // load initial data
     try data.append(.{ .id = "1", .company = "Amazon", .contact = "Jeff Bezos", .country = "United States" });
     try data.append(.{ .id = "2", .company = "Apple", .contact = "Tim Cook", .country = "United States" });
@@ -26,21 +26,21 @@ pub fn main() !void {
     const addr = std.process.getEnvVarOwned(gpa, "ADDR") catch "127.0.0.1";
     const port = try std.fmt.parseUnsigned(u16, std.process.getEnvVarOwned(gpa, "PORT") catch "3000", 10);
     // server config
-    var server = try httpz.Server().init(gpa, .{ .address = addr, .port = port, .request = .{
+    var server = try httpz.Server(void).init(gpa, .{ .address = addr, .port = port, .request = .{
         .max_form_count = 4,
-    } });
+    } }, {});
     // routes
-    var router = server.router();
-    router.get("/", index);
-    router.get("/css/output.css", cssGet);
-    router.get("/company/add", companyAdd);
-    router.get("/company/edit/:id", companyEdit);
-    router.get("/company", companyGet);
-    router.get("/company/:id", companyGet);
-    router.put("/company/:id", companyPut);
-    router.post("/company", companyPost);
-    router.delete("/company/:id", companyDelete);
-    router.get("/metrics", metrics);
+    var router = try server.router(.{});
+    router.get("/", index, .{});
+    router.get("/css/output.css", cssGet, .{});
+    router.get("/company/add", companyAdd, .{});
+    router.get("/company/edit/:id", companyEdit, .{});
+    router.get("/company", companyGet, .{});
+    router.get("/company/:id", companyGet, .{});
+    router.put("/company/:id", companyPut, .{});
+    router.post("/company", companyPost, .{});
+    router.delete("/company/:id", companyDelete, .{});
+    router.get("/metrics", metrics, .{});
     // init server
     std.log.info("listening at http://{s}:{d}/", .{ addr, port });
     try server.listen();
@@ -57,11 +57,13 @@ fn index(req: *httpz.Request, res: *httpz.Response) !void {
     var root = try d.root(.object);
     try root.put("companies", data.items);
     if (zmpl.find("row")) |template| {
-        const output = try template.renderWithOptions(
+        const output = try template.render(
             &d,
+            null,
+            null,
             .{ .layout = zmpl.find("index") },
         );
-        res.body = output;
+        res.body = try res.arena.dupe(u8, output);
         res.content_type = .HTML;
     }
 }
@@ -73,7 +75,7 @@ fn cssGet(req: *httpz.Request, res: *httpz.Response) !void {
         std.log.info("{any} {s} from {any} {d}ms", .{ req.method, req.url.raw, req.address, elapsed });
     }
     res.content_type = .CSS;
-    res.body = css;
+    res.body = try res.arena.dupe(u8, css);
 }
 
 fn companyAdd(req: *httpz.Request, res: *httpz.Response) !void {
@@ -87,11 +89,13 @@ fn companyAdd(req: *httpz.Request, res: *httpz.Response) !void {
     var root = try d.root(.object);
     try root.put("companies", data.items);
     if (zmpl.find("row")) |template| {
-        const output = try template.renderWithOptions(
+        const output = try template.render(
             &d,
+            null,
+            null,
             .{ .layout = zmpl.find("company_add") },
         );
-        res.body = output;
+        res.body = try res.arena.dupe(u8, output);
         res.content_type = .HTML;
     }
 }
@@ -117,8 +121,8 @@ fn companyEdit(req: *httpz.Request, res: *httpz.Response) !void {
     try root.put("contact", company.contact);
     try root.put("country", company.country);
     if (zmpl.find("row_edit")) |template| {
-        const output = try template.render(&d);
-        res.body = output;
+        const output = try template.render(&d, null, null, .{});
+        res.body = try res.arena.dupe(u8, output);
         res.content_type = .HTML;
     }
 }
@@ -141,8 +145,8 @@ fn companyGet(req: *httpz.Request, res: *httpz.Response) !void {
                 try root.put("contact", company.contact);
                 try root.put("country", company.country);
                 if (zmpl.find("row_get")) |template| {
-                    const output = try template.render(&d);
-                    res.body = output;
+                    const output = try template.render(&d, null, null, .{});
+                    res.body = try res.arena.dupe(u8, output);
                     return;
                 }
             }
@@ -150,11 +154,13 @@ fn companyGet(req: *httpz.Request, res: *httpz.Response) !void {
     }
     try root.put("companies", data.items);
     if (zmpl.find("row")) |template| {
-        const output = try template.renderWithOptions(
+        const output = try template.render(
             &d,
+            null,
+            null,
             .{ .layout = zmpl.find("companies") },
         );
-        res.body = output;
+        res.body = try res.arena.dupe(u8, output);
     }
 }
 
@@ -171,16 +177,16 @@ fn companyPut(req: *httpz.Request, res: *httpz.Response) !void {
     if (req.param("id")) |id| {
         for (data.items, 0..) |c, i| {
             if (std.mem.eql(u8, c.id, id)) {
-                data.items[i].company = try gpa.dupe(u8, fd.get("company") orelse "");
-                data.items[i].contact = try gpa.dupe(u8, fd.get("contact") orelse "");
-                data.items[i].country = try gpa.dupe(u8, fd.get("country") orelse "");
+                data.items[i].company = try res.arena.dupe(u8, fd.get("company") orelse "");
+                data.items[i].contact = try res.arena.dupe(u8, fd.get("contact") orelse "");
+                data.items[i].country = try res.arena.dupe(u8, fd.get("country") orelse "");
                 try root.put("id", id);
                 try root.put("company", fd.get("company"));
                 try root.put("contact", fd.get("contact"));
                 try root.put("country", fd.get("country"));
                 if (zmpl.find("row_get")) |template| {
-                    const output = try template.render(&d);
-                    res.body = output;
+                    const output = try template.render(&d, null, null, .{});
+                    res.body = try res.arena.dupe(u8, output);
                     res.content_type = .HTML;
                     return;
                 }
@@ -204,16 +210,18 @@ fn companyPost(req: *httpz.Request, res: *httpz.Response) !void {
         if (n > max) max = n;
     }
     const id = try std.fmt.allocPrint(res.arena, "{d}", .{max + 1});
-    try data.append(.{ .id = try gpa.dupe(u8, id), .company = try gpa.dupe(u8, fd.get("company") orelse ""), .contact = try gpa.dupe(u8, fd.get("contact") orelse ""), .country = try gpa.dupe(u8, fd.get("country") orelse "") });
+    try data.append(.{ .id = try res.arena.dupe(u8, id), .company = try res.arena.dupe(u8, fd.get("company") orelse ""), .contact = try res.arena.dupe(u8, fd.get("contact") orelse ""), .country = try res.arena.dupe(u8, fd.get("country") orelse "") });
     var root = try d.root(.object);
     try root.put("companies", data.items);
     if (zmpl.find("row")) |template| {
-        const output = try template.renderWithOptions(
+        const output = try template.render(
             &d,
+            null,
+            null,
             .{ .layout = zmpl.find("companies") },
         );
         res.content_type = .HTML;
-        res.body = output;
+        res.body = try res.arena.dupe(u8, output);
     }
 }
 
@@ -231,12 +239,14 @@ fn companyDelete(req: *httpz.Request, res: *httpz.Response) !void {
     }
     try root.put("companies", data.items);
     if (zmpl.find("row")) |template| {
-        const output = try template.renderWithOptions(
+        const output = try template.render(
             &d,
+            null,
+            null,
             .{ .layout = zmpl.find("companies") },
         );
         res.content_type = .HTML;
-        res.body = output;
+        res.body = try res.arena.dupe(u8, output);
     }
 }
 
