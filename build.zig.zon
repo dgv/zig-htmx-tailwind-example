@@ -2,11 +2,11 @@
     .name = .zig_htmx_tailwind_example,
     .version = "0.0.0",
     .fingerprint = 0x6e235e255ab0344,
-    .minimum_zig_version = "0.13.0",
+    .minimum_zig_version = "0.14.0",
     .dependencies = .{
         .httpz = .{
-            .url = "git+https://github.com/karlseguin/http.zig?ref=master#56258131ef4505543fef5484451867c13c5ff322",
-            .hash = "httpz-0.0.0-PNVzrJSuBgDFvO7mtd2qDzaq8_hXIu1BqFuL1jwAV8Ac",
+            .url = "git+https://github.com/karlseguin/http.zig?ref=master#2924ead41db9e1986db3b4909a82185c576f6361",
+            .hash = "httpz-0.0.0-PNVzrC7CBgDSMZNP7chgAczR3FyAz5Eum6Kb1_K9kmYR",
         },
         .zmpl = .{
             .url = "git+https://github.com/jetzig-framework/zmpl?ref=master#3ec11289fdee2e0c70975cb5dd85d3041d723912",
