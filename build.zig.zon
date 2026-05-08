@@ -2,15 +2,15 @@
     .name = .zig_htmx_tailwind_example,
     .version = "0.0.0",
     .fingerprint = 0x6e235e255ab0344,
-    .minimum_zig_version = "0.14.0",
+    .minimum_zig_version = "0.16.0",
     .dependencies = .{
         .httpz = .{
-            .url = "git+https://github.com/karlseguin/http.zig?ref=master#2924ead41db9e1986db3b4909a82185c576f6361",
-            .hash = "httpz-0.0.0-PNVzrC7CBgDSMZNP7chgAczR3FyAz5Eum6Kb1_K9kmYR",
+            .url = "git+https://github.com/karlseguin/http.zig?ref=zig-0.16#40be022616e50aa315ec9231bbc7a136ff3c1f33",
+            .hash = "httpz-0.0.0-PNVzrOO_BwDQuZej17hqyhdz7iGP671975A3uF8Ln3gu",
         },
         .zmpl = .{
-            .url = "git+https://github.com/jetzig-framework/zmpl?ref=master#3ec11289fdee2e0c70975cb5dd85d3041d723912",
-            .hash = "zmpl-0.0.1-SYFGBuZoAwAMuvHNkO_1BbutpWhg7CdSgYd8t4OaaZeR",
+            .url = "git+https://github.com/jetzig-framework/zmpl#8694ee8d4cd07107004de831408bd50fdbc131e8",
+            .hash = "zmpl-0.0.1-SYFGBouwAwBCqjgSsXykI6z0TNQvcgbVLXCg9UiXg7hF",
         },
     },
     .paths = .{

@@ -5,6 +5,7 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const templates_paths = try zmpl_build.templatesPaths(
+        b.graph.io,
         b.allocator,
         &.{
             .{ .prefix = "", .path = &.{
@@ -14,9 +15,11 @@ pub fn build(b: *std.Build) !void {
     );
     const exe = b.addExecutable(.{
         .name = "zig-htmx-tailwind-example",
-        .root_source_file = b.path("main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     exe.root_module.addImport("zmpl", b.dependency("zmpl", .{
         .target = target,

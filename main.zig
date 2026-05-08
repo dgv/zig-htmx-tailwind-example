@@ -3,33 +3,40 @@ const httpz = @import("httpz");
 const zmpl = @import("zmpl");
 const css = @embedFile("templates/output.css");
 
-// sample data struct for CRUD
 const Company = struct {
     id: []const u8,
     company: []const u8,
     contact: []const u8,
     country: []const u8,
 };
-// data stored globally
-var data = std.ArrayList(Company).init(std.heap.page_allocator); // heap page size usually have 4096
 
-pub fn main() !void {
-    // general purpose allocator
-    var global = std.heap.GeneralPurposeAllocator(.{}){};
-    const gpa = global.allocator();
-    // load initial data
-    try data.append(.{ .id = "1", .company = "Amazon", .contact = "Jeff Bezos", .country = "United States" });
-    try data.append(.{ .id = "2", .company = "Apple", .contact = "Tim Cook", .country = "United States" });
-    try data.append(.{ .id = "3", .company = "Microsoft", .contact = "Satya Nadella", .country = "United States" });
-    defer data.deinit();
-    // parse env
-    const addr = std.process.getEnvVarOwned(gpa, "ADDR") catch "127.0.0.1";
-    const port = try std.fmt.parseUnsigned(u16, std.process.getEnvVarOwned(gpa, "PORT") catch "3000", 10);
-    // server config
-    var server = try httpz.Server(void).init(gpa, .{ .address = addr, .port = port, .request = .{
-        .max_form_count = 4,
-    } }, {});
-    // routes
+var data: std.ArrayList(Company) = .empty;
+var global_io: std.Io = undefined;
+var global_gpa: std.mem.Allocator = undefined;
+
+pub fn main(init: std.process.Init) !void {
+    global_gpa = init.gpa;
+    global_io = init.io;
+
+    try data.append(std.heap.page_allocator, .{ .id = "1", .company = "Amazon", .contact = "Jeff Bezos", .country = "United States" });
+    try data.append(std.heap.page_allocator, .{ .id = "2", .company = "Apple", .contact = "Tim Cook", .country = "United States" });
+    try data.append(std.heap.page_allocator, .{ .id = "3", .company = "Microsoft", .contact = "Satya Nadella", .country = "United States" });
+    defer data.deinit(std.heap.page_allocator);
+
+    const addr_str = init.environ_map.get("ADDR") orelse "127.0.0.1";
+    const port_str = init.environ_map.get("PORT") orelse "3000";
+    const port = try std.fmt.parseUnsigned(u16, port_str, 10);
+    const addr: httpz.Config.Address = .{ .ip = try std.Io.net.IpAddress.resolve(init.io, addr_str, port) };
+
+    var server = try httpz.Server(void).init(init.io, global_gpa, .{
+        .address = addr,
+        .request = .{
+            .max_form_count = 4,
+        },
+    }, {});
+    defer server.deinit();
+    defer server.stop();
+
     var router = try server.router(.{});
     router.get("/", index, .{});
     router.get("/css/output.css", cssGet, .{});
@@ -41,72 +48,64 @@ pub fn main() !void {
     router.post("/company", companyPost, .{});
     router.delete("/company/:id", companyDelete, .{});
     router.get("/metrics", metrics, .{});
-    // init server
-    std.log.info("listening at http://{s}:{d}/", .{ addr, port });
+
+    std.log.info("listening at http://{s}:{d}/", .{ addr_str, port });
     try server.listen();
 }
 
+fn logStart() std.Io.Timestamp {
+    return std.Io.Clock.awake.now(global_io);
+}
+
+fn logEnd(req: *httpz.Request, start: std.Io.Timestamp) void {
+    const end = std.Io.Clock.awake.now(global_io);
+    const elapsed = start.durationTo(end);
+    var buf: [64]u8 = undefined;
+    var w = std.Io.Writer.fixed(&buf);
+    req.address.format(&w) catch {};
+    const addr_str = std.Io.Writer.buffered(&w);
+    std.log.info("{any} {s} from {s} {d}ms", .{ req.method, req.url.raw, addr_str, elapsed.toMilliseconds() });
+}
+
 fn index(req: *httpz.Request, res: *httpz.Response) !void {
-    var timer = try std.time.Timer.start();
-    defer {
-        const elapsed = timer.lap() / 1000;
-        std.log.info("{any} {s} from {any} {d}ms", .{ req.method, req.url.raw, req.address, elapsed });
-    }
-    var d = zmpl.Data.init(res.arena);
+    const start = logStart();
+    defer logEnd(req, start);
+    var d = zmpl.Data.init(global_io, global_gpa);
     defer d.deinit();
     var root = try d.root(.object);
     try root.put("companies", data.items);
     if (zmpl.find("row")) |template| {
-        const output = try template.render(
-            &d,
-            null,
-            null,
-            .{ .layout = zmpl.find("index") },
-        );
+        const output = try template.render(global_io, &d, null, null, &[_]zmpl.Template.Block{}, .{ .layout = zmpl.find("index") });
         res.body = try res.arena.dupe(u8, output);
         res.content_type = .HTML;
     }
 }
 
 fn cssGet(req: *httpz.Request, res: *httpz.Response) !void {
-    var timer = try std.time.Timer.start();
-    defer {
-        const elapsed = timer.lap() / 1000;
-        std.log.info("{any} {s} from {any} {d}ms", .{ req.method, req.url.raw, req.address, elapsed });
-    }
+    const start = logStart();
+    defer logEnd(req, start);
     res.content_type = .CSS;
     res.body = try res.arena.dupe(u8, css);
 }
 
 fn companyAdd(req: *httpz.Request, res: *httpz.Response) !void {
-    var timer = try std.time.Timer.start();
-    defer {
-        const elapsed = timer.lap() / 1000;
-        std.log.info("{any} {s} from {any} {d}ms", .{ req.method, req.url.raw, req.address, elapsed });
-    }
-    var d = zmpl.Data.init(res.arena);
+    const start = logStart();
+    defer logEnd(req, start);
+    var d = zmpl.Data.init(global_io, global_gpa);
     defer d.deinit();
     var root = try d.root(.object);
     try root.put("companies", data.items);
     if (zmpl.find("row")) |template| {
-        const output = try template.render(
-            &d,
-            null,
-            null,
-            .{ .layout = zmpl.find("company_add") },
-        );
+        const output = try template.render(global_io, &d, null, null, &[_]zmpl.Template.Block{}, .{ .layout = zmpl.find("company_add") });
         res.body = try res.arena.dupe(u8, output);
         res.content_type = .HTML;
     }
 }
 
 fn companyEdit(req: *httpz.Request, res: *httpz.Response) !void {
-    var timer = try std.time.Timer.start();
-    defer {
-        const elapsed = timer.lap() / 1000;
-        std.log.info("{any} {s} from {any} {d}ms", .{ req.method, req.url.raw, req.address, elapsed });
-    }
-    var d = zmpl.Data.init(res.arena);
+    const start = logStart();
+    defer logEnd(req, start);
+    var d = zmpl.Data.init(global_io, global_gpa);
     defer d.deinit();
     var root = try d.root(.object);
     const id = req.param("id").?;
@@ -121,19 +120,16 @@ fn companyEdit(req: *httpz.Request, res: *httpz.Response) !void {
     try root.put("contact", company.contact);
     try root.put("country", company.country);
     if (zmpl.find("row_edit")) |template| {
-        const output = try template.render(&d, null, null, .{});
+        const output = try template.render(global_io, &d, null, null, &[_]zmpl.Template.Block{}, .{});
         res.body = try res.arena.dupe(u8, output);
         res.content_type = .HTML;
     }
 }
 
 fn companyGet(req: *httpz.Request, res: *httpz.Response) !void {
-    var timer = try std.time.Timer.start();
-    defer {
-        const elapsed = timer.lap() / 1000;
-        std.log.info("{any} {s} from {any} {d}ms", .{ req.method, req.url.raw, req.address, elapsed });
-    }
-    var d = zmpl.Data.init(res.arena);
+    const start = logStart();
+    defer logEnd(req, start);
+    var d = zmpl.Data.init(global_io, global_gpa);
     defer d.deinit();
     var root = try d.root(.object);
     res.content_type = .HTML;
@@ -145,7 +141,7 @@ fn companyGet(req: *httpz.Request, res: *httpz.Response) !void {
                 try root.put("contact", company.contact);
                 try root.put("country", company.country);
                 if (zmpl.find("row_get")) |template| {
-                    const output = try template.render(&d, null, null, .{});
+                    const output = try template.render(global_io, &d, null, null, &[_]zmpl.Template.Block{}, .{});
                     res.body = try res.arena.dupe(u8, output);
                     return;
                 }
@@ -154,23 +150,15 @@ fn companyGet(req: *httpz.Request, res: *httpz.Response) !void {
     }
     try root.put("companies", data.items);
     if (zmpl.find("row")) |template| {
-        const output = try template.render(
-            &d,
-            null,
-            null,
-            .{ .layout = zmpl.find("companies") },
-        );
+        const output = try template.render(global_io, &d, null, null, &[_]zmpl.Template.Block{}, .{ .layout = zmpl.find("companies") });
         res.body = try res.arena.dupe(u8, output);
     }
 }
 
 fn companyPut(req: *httpz.Request, res: *httpz.Response) !void {
-    var timer = try std.time.Timer.start();
-    defer {
-        const elapsed = timer.lap() / 1000;
-        std.log.info("{any} {s} from {any} {d}ms", .{ req.method, req.url.raw, req.address, elapsed });
-    }
-    var d = zmpl.Data.init(res.arena);
+    const start = logStart();
+    defer logEnd(req, start);
+    var d = zmpl.Data.init(global_io, global_gpa);
     defer d.deinit();
     var root = try d.root(.object);
     const fd = try req.formData();
@@ -185,7 +173,7 @@ fn companyPut(req: *httpz.Request, res: *httpz.Response) !void {
                 try root.put("contact", fd.get("contact"));
                 try root.put("country", fd.get("country"));
                 if (zmpl.find("row_get")) |template| {
-                    const output = try template.render(&d, null, null, .{});
+                    const output = try template.render(global_io, &d, null, null, &[_]zmpl.Template.Block{}, .{});
                     res.body = try res.arena.dupe(u8, output);
                     res.content_type = .HTML;
                     return;
@@ -196,12 +184,9 @@ fn companyPut(req: *httpz.Request, res: *httpz.Response) !void {
 }
 
 fn companyPost(req: *httpz.Request, res: *httpz.Response) !void {
-    var timer = try std.time.Timer.start();
-    defer {
-        const elapsed = timer.lap() / 1000;
-        std.log.info("{any} {s} from {any} {d}ms", .{ req.method, req.url.raw, req.address, elapsed });
-    }
-    var d = zmpl.Data.init(res.arena);
+    const start = logStart();
+    defer logEnd(req, start);
+    var d = zmpl.Data.init(global_io, global_gpa);
     defer d.deinit();
     const fd = try req.formData();
     var max: u32 = 0;
@@ -210,28 +195,20 @@ fn companyPost(req: *httpz.Request, res: *httpz.Response) !void {
         if (n > max) max = n;
     }
     const id = try std.fmt.allocPrint(res.arena, "{d}", .{max + 1});
-    try data.append(.{ .id = try res.arena.dupe(u8, id), .company = try res.arena.dupe(u8, fd.get("company") orelse ""), .contact = try res.arena.dupe(u8, fd.get("contact") orelse ""), .country = try res.arena.dupe(u8, fd.get("country") orelse "") });
+    try data.append(std.heap.page_allocator, .{ .id = try res.arena.dupe(u8, id), .company = try res.arena.dupe(u8, fd.get("company") orelse ""), .contact = try res.arena.dupe(u8, fd.get("contact") orelse ""), .country = try res.arena.dupe(u8, fd.get("country") orelse "") });
     var root = try d.root(.object);
     try root.put("companies", data.items);
     if (zmpl.find("row")) |template| {
-        const output = try template.render(
-            &d,
-            null,
-            null,
-            .{ .layout = zmpl.find("companies") },
-        );
+        const output = try template.render(global_io, &d, null, null, &[_]zmpl.Template.Block{}, .{ .layout = zmpl.find("companies") });
         res.content_type = .HTML;
         res.body = try res.arena.dupe(u8, output);
     }
 }
 
 fn companyDelete(req: *httpz.Request, res: *httpz.Response) !void {
-    var timer = try std.time.Timer.start();
-    defer {
-        const elapsed = timer.lap() / 1000;
-        std.log.info("{any} {s} from {any} {d}ms", .{ req.method, req.url.raw, req.address, elapsed });
-    }
-    var d = zmpl.Data.init(res.arena);
+    const start = logStart();
+    defer logEnd(req, start);
+    var d = zmpl.Data.init(global_io, global_gpa);
     defer d.deinit();
     var root = try d.root(.object);
     if (req.param("id")) |id| {
@@ -239,23 +216,15 @@ fn companyDelete(req: *httpz.Request, res: *httpz.Response) !void {
     }
     try root.put("companies", data.items);
     if (zmpl.find("row")) |template| {
-        const output = try template.render(
-            &d,
-            null,
-            null,
-            .{ .layout = zmpl.find("companies") },
-        );
+        const output = try template.render(global_io, &d, null, null, &[_]zmpl.Template.Block{}, .{ .layout = zmpl.find("companies") });
         res.content_type = .HTML;
         res.body = try res.arena.dupe(u8, output);
     }
 }
 
 fn metrics(req: *httpz.Request, res: *httpz.Response) !void {
-    var timer = try std.time.Timer.start();
-    defer {
-        const elapsed = timer.lap() / 1000;
-        std.log.info("{any} {s} from {any} {d}ms", .{ req.method, req.url.raw, req.address, elapsed });
-    }
+    const start = logStart();
+    defer logEnd(req, start);
     res.content_type = .TEXT;
     return httpz.writeMetrics(res.writer());
 }
