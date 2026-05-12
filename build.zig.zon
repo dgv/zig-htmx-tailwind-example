@@ -9,7 +9,7 @@
             .hash = "httpz-0.0.0-PNVzrOO_BwDQuZej17hqyhdz7iGP671975A3uF8Ln3gu",
         },
         .zmpl = .{
-            .url = "git+https://github.com/dgv/zmpl#1bd709944aee678be78f7fc3e48a1ebbfcbae6c9",
+            .url = "git+https://github.com/jetzig-framework/zmpl#2abf11e712362eaf810dd7844c663bb5d50ae538",
             .hash = "zmpl-0.0.1-SYFGBqmyAwD3G2--wma0TX5U8qZpCYOvGEtQRDr9qP3A",
         },
     },
